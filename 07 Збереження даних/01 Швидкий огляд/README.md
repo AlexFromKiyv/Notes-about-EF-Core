@@ -5,16 +5,61 @@
 
 ## Підхід 1: відстеження змін та збереження змін
 
-У багатьох сценаріях вашій програмі потрібно запитувати деякі дані з бази даних, виконувати деякі зміни та зберігати ці зміни; це іноді називають «одиницею роботи». Наприклад, припустимо, що у вас є набір блогів, і ви хочете змінити властивість Url одного з них. В EF це зазвичай робиться так:
+### Підготовка прикладу
 
 ```cs
-    var blog = await context.Blogs.SingleAsync(b => b.Url == "https://example.com");
+public class Blog
+{
+    public int BlogId { get; set; }
+    public string Url { get; set; }
+
+    public List<Post> Posts { get; set; }
+}
+
+public class Post
+{
+    public int PostId { get; set; }
+    public string Title { get; set; }
+    public string Content { get; set; }
+
+    public int BlogId { get; set; }
+    public Blog Blog { get; set; }
+}
+```
+
+```cs
+    public DbSet<Blog> Blogs { get; set; }
+    public DbSet<Post> Posts { get; set; }
+```
+
+```cs
+static async Task PopulateDatabase(ApplicationDbContext context)
+{
+    context.Blogs.Add(new Blog
+    {
+        Url = "http://example.com",
+        Posts = new List<Post>
+        {
+            new Post { Title = "My First Post", Content = "This is my first post." },
+            new Post { Title = "My Second Post", Content = "This is my second post." }
+        }
+    });
+
+    var countAdded = await context.SaveChangesAsync();
+    Console.WriteLine(countAdded);
+}
+```
+У багатьох сценаріях вашій програмі потрібно запитувати деякі дані з бази даних, виконувати деякі зміни та зберігати ці зміни; це іноді називають «одиницею роботи». Наприклад, припустимо, що у вас є набір блогів, і ви хочете змінити властивість Url одного з них. В EF це зазвичай робиться так:
+
+
+```cs
+    Blog? blog = await context.Blogs.SingleAsync(b => b.Url == "http://example.com");
     blog.Url = "http://example.com/blog";
-    await context.SaveChangesAsync();
-    Console.WriteLine("Updated blog with ID " + blog.BlogId);
+    var count = await context.SaveChangesAsync();
+    Console.WriteLine(count);
 ```
 ```
-Updated blog with ID 1
+1
 ```
 
 Наведений вище код виконує такі кроки:
@@ -84,5 +129,5 @@ WHERE [b].[Rating] < 3
     * «Я хочу видалити всі блоги, назва яких починається на літеру X»
 
 * Якщо ви вже точно знаєте, які об'єкти хочете змінити та як саме, використовуйте ExecuteUpdate та ExecuteDelete. Приклади сценаріїв:
-    * «Я хочу видалити блог під назвою «Фу»»
+    * «Я хочу видалити блог під назвою «Foo»»
     * «Я хочу змінити назву блогу з ідентифікатором 5 на «Bar»»
