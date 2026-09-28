@@ -60,7 +60,7 @@ EF Core відстежує зміни на рівні властивостей. 
 
 Цей підхід має кілька переваг порівняно з явним відстеженням екземплярів сутностей:
 
-* Усе просто. Стани сутностей рідко потребують явного керування — EF Core сам опікується змінами стану.
+* Це просто. Стани сутностей рідко потребують явного керування — EF Core сам опікується змінами стану.
 * Оновлення обмежуються лише тими значеннями, які фактично змінилися.
 * Значення тіньових властивостей зберігаються та використовуються за потреби. Це особливо актуально, коли зовнішні ключі зберігаються в тіньовому стані.
 * Початкові значення властивостей зберігаються автоматично та використовуються для ефективного оновлення.
@@ -167,6 +167,10 @@ static async Task QueryAndUpadteBlog(ApplicationDbContext context)
 }
 
 ```
+```
+2
+```
+
 Виклик SaveChanges призводить до таких оновлень бази даних :
 
 ```sql
@@ -217,22 +221,24 @@ Post {Id: 2} Modified
 Оновлення, подібні до тих, що наведено в попередньому прикладі, можна поєднувати з операціями вставлення та видалення в межах однієї одиниці роботи.
 
 ```cs
-static async Task QueryAndUpadteBlog(ApplicationDbContext context)
+static async Task QueryInsertUpdateAndDeleteBlog(ApplicationDbContext context)
 {
-    var blog = await context.Blogs
-        .Include(e => e.Posts)
-        .FirstAsync(e => e.Name == ".NET Blog");
+    var blog = await context.Blogs.Include(e => e.Posts).FirstAsync(e => e.Name == ".NET Blog");
 
+    // Modify property values
     blog.Name = ".NET Blog (Updated!)";
 
-    IList<Post> posts = blog.Posts
-        .Where(e => !e.Title.Contains("5.0"))
-        .ToList();
+    // Insert a new Post
+    blog.Posts.Add(
+        new Post
+        {
+            Title = "What’s next for System.Text.Json?",
+            Content = ".NET 5.0 was released recently and has come with many..."
+        });
 
-    foreach (var post in posts)
-    {
-        post.Title = post.Title.Replace("5", "5.0");
-    }
+    // Mark an existing Post as Deleted
+    var postToDelete = blog.Posts.Single(e => e.Title == "Announcing F# 5");
+    context.Remove(postToDelete);
 
     context.ChangeTracker.DetectChanges();
     Console.WriteLine(context.ChangeTracker.DebugView.LongView);
