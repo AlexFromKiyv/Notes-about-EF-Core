@@ -25,7 +25,7 @@ public class Blog
 public class BlogAssets
 {
     public int Id { get; set; } // Primary key
-    public byte[] Banner { get; set; } = Array.Empty<byte>();
+    public byte[] Banner { get; set; } 
 
     public int? BlogId { get; set; } // Foreign key
     public Blog Blog { get; set; } // Reference navigation
@@ -91,6 +91,7 @@ public class ApplicationDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+      modelBuilder.Entity<PostTag>().HasKey(e => new { e.PostId, e.TagId });
     }
 }
 ```
@@ -159,46 +160,46 @@ partial class Program
     protected static async Task PopulateDatabase(ApplicationDbContext context)
     {
         context.AddRange(
-    new Blog
-    {
-        Name = ".NET Blog",
-        Assets = new BlogAssets(),
-        Posts =
+        new Blog
         {
-                    new Post
-                    {
-                        Title = "Announcing the Release of EF Core 5.0",
-                        Content = "Announcing the release of EF Core 5.0, a full featured cross-platform..."
-                    },
-                    new Post
-                    {
-                        Title = "Announcing F# 5",
-                        Content = "F# 5 is the latest version of F#, the functional programming language..."
-                    },
+            Name = ".NET Blog",
+            Assets = new BlogAssets() { Banner = Array.Empty<byte>() },
+            Posts =
+            {
+                        new Post
+                        {
+                            Title = "Announcing the Release of EF Core 5.0",
+                            Content = "Announcing the release of EF Core 5.0, a full featured cross-platform..."
+                        },
+                        new Post
+                        {
+                            Title = "Announcing F# 5",
+                            Content = "F# 5 is the latest version of F#, the functional programming language..."
+                        },
+            },
         },
-    },
-    new Blog
-    {
-        Name = "Visual Studio Blog",
-        Assets = new BlogAssets(),
-        Posts =
+        new Blog
         {
-                    new Post
-                    {
-                        Title = "Disassembly improvements for optimized managed debugging",
-                        Content =
-                            "If you are focused on squeezing out the last bits of performance for your .NET service or..."
-                    },
-                    new Post
-                    {
-                        Title = "Database Profiling with Visual Studio",
-                        Content = "Examine when database queries were executed and measure how long the take using..."
-                    },
-        }
-    },
-    new Tag { Text = ".NET" },
-    new Tag { Text = "Visual Studio" },
-    new Tag { Text = "EF Core" });
+            Name = "Visual Studio Blog",
+            Assets = new BlogAssets() { Banner = Array.Empty<byte>() },
+            Posts =
+            {
+                        new Post
+                        {
+                            Title = "Disassembly improvements for optimized managed debugging",
+                            Content =
+                                "If you are focused on squeezing out the last bits of performance for your .NET service or..."
+                        },
+                        new Post
+                        {
+                            Title = "Database Profiling with Visual Studio",
+                            Content = "Examine when database queries were executed and measure how long the take using..."
+                        },
+            }
+        },
+        new Tag { Text = ".NET" },
+        new Tag { Text = "Visual Studio" },
+        new Tag { Text = "EF Core" });
 
         await context.SaveChangesAsync();
     }
@@ -219,14 +220,39 @@ Programm.cs
 static async Task DoAsync()
 {
     //await CleanAndPopulateDatabase();
-    await Relationship_fixup_1();
+    await Relationship_fixup_0();
 }
 await DoAsync();
 
 
+static async Task Relationship_fixup_0()
+{
+    using var context = new ApplicationDbContextFactory().CreateDbContext(null);
+
+    var blogs = await context.Blogs
+    .ToListAsync();
+
+    Console.WriteLine(context.ChangeTracker.DebugView.LongView);
+}
+```
+```
+Blog {Id: 1} Unchanged
+    Id: 1 PK
+    Name: '.NET Blog'
+  Assets: <null>
+  Posts: []
+Blog {Id: 2} Unchanged
+    Id: 2 PK
+    Name: 'Visual Studio Blog'
+  Assets: <null>
+  Posts: []
+```
+Разом з Blog завантажимо Posts і Assets.
+
+```cs
 static async Task Relationship_fixup_1()
 {
-    using var context = new ApplicationDbContextFactory(false).CreateDbContext(null);
+    using var context = new ApplicationDbContextFactory().CreateDbContext(null);
 
     var blogs = await context.Blogs
     .Include(e => e.Posts)
@@ -242,13 +268,6 @@ static async Task Relationship_fixup_1()
 Перегляд налагоджувальної інформації відстежувача змін після виконання цього запиту показує два блоги; для кожного з них відстежується один актив і два дописи:
 
 ```
-info: RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Database.Command)
-      Executed DbCommand (58ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
-      SELECT [b].[Id], [b].[Name], [a].[Id], [p].[Id], [p].[BlogId], [p].[Content], [p].[Title], [a].[Banner], [a].[BlogId]
-      FROM [Blogs] AS [b]
-      LEFT JOIN [Assets] AS [a] ON [b].[Id] = [a].[BlogId]
-      LEFT JOIN [Posts] AS [p] ON [b].[Id] = [p].[BlogId]
-      ORDER BY [b].[Id], [a].[Id]
 Blog {Id: 1} Unchanged
     Id: 1 PK
     Name: '.NET Blog'
@@ -459,47 +478,53 @@ static async Task Changing_relationships_using_navigations_1()
 
     Тут необхідно викликати ChangeTracker.DetectChanges(), оскільки звернення до режиму налагоджувального перегляду (debug view) не призводить до автоматичного виявлення змін.
 
-Ось відлагоджувальне представлення, виведене після виконання DetectChanges() наведеного вище коду:
+Ось відлагоджувальне представлення, виведене після виконання DetectChanges() наведеного вище коду. Тут тільки відзначено шо змінило наш код:
 
 ```
 Blog {Id: 1} Unchanged
     Id: 1 PK
     Name: '.NET Blog'
   Assets: <null>
-  Posts: [{Id: 1}, {Id: 2}, {Id: 3}]
+  Posts: [{Id: 1}, {Id: 2}] !!!
 Blog {Id: 2} Unchanged
     Id: 2 PK
     Name: 'Visual Studio Blog'
   Assets: <null>
-  Posts: [{Id: 4}]
-Post {Id: 1} Unchanged
-    Id: 1 PK
-    BlogId: 1 FK
-    Content: 'Announcing the release of EF Core 5.0, a full featured cross...'
-    Title: 'Announcing the Release of EF Core 5.0'
-  Blog: {Id: 1}
-  Tags: []
-Post {Id: 2} Unchanged
-    Id: 2 PK
-    BlogId: 1 FK
-    Content: 'F# 5 is the latest version of F#, the functional programming...'
-    Title: 'Announcing F# 5'
-  Blog: {Id: 1}
-  Tags: []
-Post {Id: 3} Modified
+  Posts: [{Id: 3}, {Id: 4}] !!!
+
+Post {Id: 3} Unchanged
     Id: 3 PK
-    BlogId: 1 FK Modified Originally 2
+    BlogId: 2 FK
     Content: 'If you are focused on squeezing out the last bits of perform...'
     Title: 'Disassembly improvements for optimized managed debugging'
-  Blog: {Id: 1}
-  Tags: []
-Post {Id: 4} Unchanged
-    Id: 4 PK
-    BlogId: 2 FK
-    Content: 'Examine when database queries were executed and measure how ...'
-    Title: 'Database Profiling with Visual Studio'
   Blog: {Id: 2}
+  Tags: [] !!!
+
+  ... After DetectChanges()
+
+Blog {Id: 1} Unchanged
+    Id: 1 PK
+    Name: '.NET Blog'
+  Assets: <null>
+  Posts: [{Id: 1}, {Id: 2}, {Id: 3}] !!!
+Blog {Id: 2} Unchanged
+    Id: 2 PK
+    Name: 'Visual Studio Blog'
+  Assets: <null>
+  Posts: [{Id: 4}] !!!
+
+  ...
+
+Post {Id: 3} Modified
+    Id: 3 PK
+    BlogId: 1 FK Modified Originally 2 !!!
+    Content: 'If you are focused on squeezing out the last bits of perform...'
+    Title: 'Disassembly improvements for optimized managed debugging'
+  Blog: {Id: 1} !!!
   Tags: []
+
+  ...
+
 ```
 Навігаційна властивість Blog.Posts у блозі .NET тепер містить три дописи (Posts: [{Id: 1}, {Id: 2}, {Id: 3}]). Так само, навігація Blog.Posts у блозі Visual Studio містить лише один допис (Posts: [{Id: 4}]). Це цілком очікувано, оскільки код явним чином змінив ці колекції.
 
@@ -515,9 +540,10 @@ info: RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Da
       OUTPUT 1
       WHERE [Id] = @p1;
 ```
-Якшо данні не візуалізуються буде, току саму зміну в БД можа досягти не заванатзуючи всі Posts.
+Якшо данні не візуалізуються, саму зміну в БД можа досягти не заванатзуючи всі Posts.
 
 ```cs
+  
   var dotNetBlog = await context.Blogs.SingleAsync(e => e.Name == ".NET Blog");
   var vsBlog = await context.Blogs.SingleAsync(e => e.Name == "Visual Studio Blog");
   
@@ -525,6 +551,7 @@ info: RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Da
   
   vsBlog.Posts.Remove(post);
   dotNetBlog.Posts.Add(post);
+
 ```
 ```
 Blog {Id: 1} Unchanged
@@ -554,6 +581,7 @@ info: RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Da
       OUTPUT 1
       WHERE [Id] = @p1;
 ```
+
 ## Зміна посилання-навігації 
 
 У попередньому прикладі допис було переміщено з одного блогу до іншого шляхом зміни навігації в колекції дописів кожного з блогів. Того самого результату можна досягти, змінивши посилання навігації Post.Blog так, щоб воно вказувало на новий блог.
@@ -706,7 +734,7 @@ EF Core бачить, що допис було додано до нового б
 ```cs
 static async Task Fixup_for_added_or_deleted_entities_3()
 {
-    using var context = new ApplicationDbContextFactory(false).CreateDbContext(null);
+    using var context = new ApplicationDbContextFactory().CreateDbContext(null);
 
     await CleanAndPopulateDatabase();
 
@@ -989,7 +1017,10 @@ static async Task Fixup_for_added_or_deleted_entities_7()
     await CleanAndPopulateDatabase();
 
     var dotNetBlog = await context.Blogs.Include(e => e.Assets).SingleAsync(e => e.Name == ".NET Blog");
-    dotNetBlog.Assets = new BlogAssets();
+  
+    //dotNetBlog.Assets = null; // for an experiment
+    dotNetBlog.Assets = new BlogAssets() { Banner = Array.Empty<byte>() };
+
 
     context.ChangeTracker.DetectChanges();
     Console.WriteLine(context.ChangeTracker.DebugView.LongView);
@@ -999,7 +1030,7 @@ static async Task Fixup_for_added_or_deleted_entities_7()
     Console.WriteLine();
 }
 ```
-У режимі налагодження перед викликом SaveChanges видно, що новий BlogAssets замінили наявні; останні тепер позначені як Modified і мають значення null у зовнішньому ключі BlogAssets.BlogId:
+У режимі налагодження перед викликом SaveChanges видно, що новий BlogAssets замінили наявний, який тепер позначений як Modified і мають значення null у зовнішньому ключі BlogAssets.BlogId:
 
 ```
 Blog {Id: 1} Unchanged
@@ -1012,10 +1043,10 @@ BlogAssets {Id: -2147482645} Added
     Banner: '0x'
     BlogId: 1 FK
   Blog: {Id: 1}
-BlogAssets {Id: 1} Modified
+BlogAssets {Id: 1} Modified  !!!
     Id: 1 PK
     Banner: '0x'
-    BlogId: <null> FK Modified Originally 1
+    BlogId: <null> FK Modified Originally 1 !!!
   Blog: <null>
 ```
 Це призводить до виконання операцій оновлення та вставки під час виклику SaveChanges:
@@ -1216,6 +1247,15 @@ Post {Id: 4} Deleted
 Розгляньте цю модель EF Core, яка створює зв’язок «багато-до-багатьох» між дописами та тегами з використанням явно визначеного типу сутності зв’язку:
 
 ```cs
+
+public class Blog
+{
+    public int Id { get; set; } // Primary key
+    public string Name { get; set; }
+
+    public IList<Post> Posts { get; } = new List<Post>(); // Collection navigation
+}
+
 public class Post
 {
     public int Id { get; set; }
@@ -1236,7 +1276,7 @@ public class Tag
     public IList<PostTag> PostTags { get; } = new List<PostTag>(); // Collection navigation
 }
 
-[PrimaryKey(nameof(PostId), nameof(TagId))]
+[PrimaryKey(nameof(PostId),nameof(TagId))]
 public class PostTag
 {
     public int PostId { get; set; } // First part of composite PK; FK to Post
@@ -1246,13 +1286,16 @@ public class PostTag
     public Tag Tag { get; set; } // Reference navigation
 }
 ```
-
+Первиний ключ для сутності PostTag можна всановити інакше 
 
 ```cs
 public class ApplicationDbContext : DbContext
 {
-    public DbSet<PostTag> PostTags { get; set; }
-
+  //...
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<PostTag>().HasKey(e => new { e.PostId, e.TagId });
+    }
 }
 ```
 Зверніть увагу, що тип сутності зв’язку PostTag містить дві властивості зовнішнього ключа. У цій моделі для того, щоб допис був пов’язаний із тегом, має існувати сполучна сутність PostTag, у якій значення зовнішнього ключа PostTag.PostId збігається зі значенням первинного ключа Post.Id, а значення зовнішнього ключа PostTag.TagId збігається зі значенням первинного ключа Tag.Id. 
@@ -1304,9 +1347,7 @@ info: RelationalEventId.CommandExecuted[20101] (Microsoft.EntityFrameworkCore.Da
 ```
 Зверніть увагу, що навігаційні властивості колекцій у сутностях Post і Tag, а також навігаційні властивості посилань у PostTag, були належним чином налаштовані. Цими зв’язками можна керувати за допомогою навігаційних властивостей замість значень зовнішніх ключів (FK) — так само, як і в усіх попередніх прикладах. Наприклад, наведений вище код можна змінити для додавання зв’язку, встановивши навігаційні посилання в сутності об’єднання:
 
-```cs
-context.Add(new PostTag { Post = post, Tag = tag });
-```
+
 
 ```cs
 static async Task Many_to_many_relationships_2()
@@ -1697,6 +1738,20 @@ static async Task Many_to_many_relationships_9()
 ```
 Нарешті, ще один спосіб задати дані корисного навантаження — це перевизначити метод `SaveChanges` або скористатися подією DbContext.SavingChanges для обробки сутностей перед оновленням бази даних.
 
+AplicationsDBContext.cs
+```cs
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var entityEntry in ChangeTracker.Entries<PostTag>())
+        {
+            if (entityEntry.State == EntityState.Added)
+            {
+                entityEntry.Entity.TaggedBy = "Alex";
+            }
+        }
+        return base.SaveChangesAsync(cancellationToken);
+    }
+```
 ```cs
 static async Task Many_to_many_relationships_10()
 {
@@ -1714,18 +1769,21 @@ static async Task Many_to_many_relationships_10()
     Console.WriteLine(context.ChangeTracker.DebugView.LongView);
 }
 ```
-
-AplicationsDBContext.cs
-```cs
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-    {
-        foreach (var entityEntry in ChangeTracker.Entries<PostTag>())
-        {
-            if (entityEntry.State == EntityState.Added)
-            {
-                entityEntry.Entity.TaggedBy = "ajcvickers";
-            }
-        }
-        return base.SaveChangesAsync(cancellationToken);
-    }
+```
+Post {Id: 3} Unchanged
+    Id: 3 PK
+    BlogId: 2 FK
+    Content: 'If you are focused on squeezing out the last bits of perform...'
+    Title: 'Disassembly improvements for optimized managed debugging'
+  Blog: <null>
+  Tags: [{Id: 1}]
+PostTag {PostId: 3, TagId: 1} Unchanged
+    PostId: 3 PK FK
+    TagId: 1 PK FK
+    TaggedBy: 'Alex'
+    TaggedOn: '22.10.2056 11:49:34'
+Tag {Id: 1} Unchanged
+    Id: 1 PK
+    Text: '.NET'
+  Posts: [{Id: 3}]
 ```

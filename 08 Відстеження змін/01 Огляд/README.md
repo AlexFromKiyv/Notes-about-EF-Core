@@ -189,6 +189,8 @@ WHERE [Id] = @p3;
 ```cs
     context.ChangeTracker.DetectChanges();
     Console.WriteLine(context.ChangeTracker.DebugView.LongView);
+
+    int count = await context.SaveChangesAsync();
 ```
 Генерує такий вивід:
 ```
